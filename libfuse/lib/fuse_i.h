@@ -16,18 +16,18 @@ struct fuse_ll;
 
 struct fuse_session
 {
-  struct fuse_session_ops op;
+  int (*receive_buf)(struct fuse_session *se,
+                     struct fuse_buf *buf,
+                     struct fuse_chan *ch);
 
-  int (*receive_buf)(struct fuse_session *se, struct fuse_buf *buf,
-                     struct fuse_chan **chp);
-
-  void (*process_buf)(void *data, const struct fuse_buf *buf,
+  void (*process_buf)(void *data,
+                      const struct fuse_buf *buf,
                       struct fuse_chan *ch);
 
+  void (*destroy)(void *data);
+
   void *data;
-
   volatile int exited;
-
   struct fuse_chan *ch;
 };
 
@@ -46,8 +46,7 @@ struct fuse_notify_req
   void (*reply)(struct fuse_notify_req *,
                 fuse_req_t,
                 uint64_t,
-                const void *,
-                const struct fuse_buf *);
+                const void *);
   struct fuse_notify_req *next;
   struct fuse_notify_req *prev;
 };

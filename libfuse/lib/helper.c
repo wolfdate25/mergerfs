@@ -40,8 +40,6 @@ static
 const
 struct fuse_opt fuse_helper_opts[] =
   {
-    FUSE_HELPER_OPT("-d",	foreground),
-    FUSE_HELPER_OPT("debug",	foreground),
     FUSE_HELPER_OPT("-f",	foreground),
     FUSE_HELPER_OPT("fsname=",	nodefault_subtype),
     FUSE_HELPER_OPT("subtype=",	nodefault_subtype),
@@ -239,8 +237,10 @@ struct fuse_chan *
 fuse_mount_common(const char       *mountpoint_,
                   struct fuse_args *args_)
 {
-  struct fuse_chan *ch;
   int fd;
+  long bufsize;
+  long pagesize;
+  struct fuse_chan *ch;
 
   /*
    * Make sure file descriptors 0, 1 and 2 are open, otherwise chaos
@@ -257,7 +257,10 @@ fuse_mount_common(const char       *mountpoint_,
   if(fd == -1)
     return NULL;
 
-  ch = fuse_kern_chan_new(fd);
+  pagesize = sysconf(_SC_PAGESIZE);
+  bufsize  = ((FUSE_MAX_MAX_PAGES + 1) * pagesize);
+
+  ch = fuse_chan_new(fd,bufsize);
   if(!ch)
     fuse_kern_unmount(mountpoint_, fd);
 
@@ -286,11 +289,13 @@ void fuse_unmount(const char *mountpoint, struct fuse_chan *ch)
   fuse_unmount_common(mountpoint, ch);
 }
 
-struct fuse *fuse_setup_common(int argc, char *argv[],
-			       const struct fuse_operations *op,
-			       size_t op_size,
-			       char **mountpoint,
-			       int *fd)
+struct fuse *
+fuse_setup_common(int argc,
+                  char *argv[],
+                  const struct fuse_operations *op,
+                  size_t op_size,
+                  char **mountpoint,
+                  int *fd)
 {
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
   struct fuse_chan *ch;
@@ -346,7 +351,7 @@ struct fuse *fuse_setup(int argc, char *argv[],
 static void fuse_teardown_common(struct fuse *fuse, char *mountpoint)
 {
   struct fuse_session *se = fuse_get_session(fuse);
-  struct fuse_chan *ch = fuse_session_next_chan(se, NULL);
+  struct fuse_chan *ch = se->ch;
   fuse_remove_signal_handlers(se);
   fuse_unmount_common(mountpoint, ch);
   fuse_destroy(fuse);

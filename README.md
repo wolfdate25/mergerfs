@@ -1,6 +1,6 @@
 % mergerfs(1) mergerfs user manual
 % Antonio SJ Musumeci <trapexit@spawn.link>
-% 2021-10-25
+% 2022-05-23
 
 # NAME
 
@@ -324,7 +324,7 @@ NFS is not fully POSIX compliant and historically certain behaviors, such as ope
 
 This hack addresses the issue where the creation of a file with a read-only mode but with a read/write or write only flag. Normally this is perfectly valid but NFS chops the one open call into multiple calls. Exactly how it is translated depends on the configuration and versions of the NFS server and clients but it results in a permission error because a normal user is not allowed to open a read-only file as writable.
 
-Even though it's a more niche situation this hack breaks normal security and behavior and as such is `off` by default. If set to `git` it will only perform the hack when the path in question includes `/.git/`. `all` will result it it applying anytime a readonly file which is empty is opened for writing.
+Even though it's a more niche situation this hack breaks normal security and behavior and as such is `off` by default. If set to `git` it will only perform the hack when the path in question includes `/.git/`. `all` will result it applying anytime a readonly file which is empty is opened for writing.
 
 
 # FUNCTIONS, CATEGORIES and POLICIES
@@ -367,7 +367,7 @@ Policies basically search branches and create a list of files / paths for functi
 
 Policies may have their own additional filtering such as those that require existing paths to be present.
 
-If all branches are filtered an error will be returned. Typically **EROFS** (read-only filesystem) or **ENOSPC** (no space left on device) depending on the most recent reason for filtering a branch. **ENOENT** will be returned if no elegible branch is found.
+If all branches are filtered an error will be returned. Typically **EROFS** (read-only filesystem) or **ENOSPC** (no space left on device) depending on the most recent reason for filtering a branch. **ENOENT** will be returned if no eligible branch is found.
 
 
 #### Path Preservation
@@ -739,7 +739,7 @@ MergerFS does not natively support any sort of tiered caching. Most users have n
 1. Fast network, slow drives, many readers: You've a 10+Gbps network with many readers and your regular drives can't keep up.
 2. Fast network, slow drives, small'ish bursty writes: You have a 10+Gbps network and wish to transfer amounts of data less than your cache drive but wish to do so quickly.
 
-With #1 its arguable if you should be using mergerfs at all. RAID would probably be the better solution. If you're going to use mergerfs there are other tactics that may help: spreading the data across drives (see the mergerfs.dup tool) and setting `func.open=rand`, using `symlinkify`, or using dm-cache or a similar technology to add tiered cache to the underlying device.
+With #1 it's arguable if you should be using mergerfs at all. RAID would probably be the better solution. If you're going to use mergerfs there are other tactics that may help: spreading the data across drives (see the mergerfs.dup tool) and setting `func.open=rand`, using `symlinkify`, or using dm-cache or a similar technology to add tiered cache to the underlying device.
 
 With #2 one could use dm-cache as well but there is another solution which requires only mergerfs and a cronjob.
 
@@ -884,7 +884,7 @@ echo 3 | sudo tee /proc/sys/vm/drop_caches
 * If you don't see some directories and files you expect, policies seem to skip branches, you get strange permission errors, etc. be sure the underlying filesystems' permissions are all the same. Use `mergerfs.fsck` to audit the drive for out of sync permissions.
 * If you still have permission issues be sure you are using POSIX ACL compliant filesystems. mergerfs doesn't generally make exceptions for FAT, NTFS, or other non-POSIX filesystem.
 * Do **not** use `cache.files=off` if you expect applications (such as rtorrent) to use [mmap](http://linux.die.net/man/2/mmap) files. Shared mmap is not currently supported in FUSE w/ page caching disabled. Enabling `dropcacheonclose` is recommended when `cache.files=partial|full|auto-full`.
-* [Kodi](http://kodi.tv), [Plex](http://plex.tv), [Subsonic](http://subsonic.org), etc. can use directory [mtime](http://linux.die.net/man/2/stat) to more efficiently determine whether to scan for new content rather than simply performing a full scan. If using the default **getattr** policy of **ff** it's possible those programs will miss an update on account of it returning the first directory found's **stat** info and its a later directory on another mount which had the **mtime** recently updated. To fix this you will want to set **func.getattr=newest**. Remember though that this is just **stat**. If the file is later **open**'ed or **unlink**'ed and the policy is different for those then a completely different file or directory could be acted on.
+* [Kodi](http://kodi.tv), [Plex](http://plex.tv), [Subsonic](http://subsonic.org), etc. can use directory [mtime](http://linux.die.net/man/2/stat) to more efficiently determine whether to scan for new content rather than simply performing a full scan. If using the default **getattr** policy of **ff** it's possible those programs will miss an update on account of it returning the first directory found's **stat** info and it's a later directory on another mount which had the **mtime** recently updated. To fix this you will want to set **func.getattr=newest**. Remember though that this is just **stat**. If the file is later **open**'ed or **unlink**'ed and the policy is different for those then a completely different file or directory could be acted on.
 * Some policies mixed with some functions may result in strange behaviors. Not that some of these behaviors and race conditions couldn't happen outside **mergerfs** but that they are far more likely to occur on account of the attempt to merge together multiple sources of data which could be out of sync due to the different policies.
 * For consistency its generally best to set **category** wide policies rather than individual **func**'s. This will help limit the confusion of tools such as [rsync](http://linux.die.net/man/1/rsync). However, the flexibility is there if needed.
 
@@ -1083,7 +1083,7 @@ Remember that hardlinks will NOT work across devices. That includes between the 
 
 #### Can I use mergerfs without SnapRAID? SnapRAID without mergerfs?
 
-Yes. They are completely unreleated pieces of software.
+Yes. They are completely unrelated pieces of software.
 
 
 #### Can mergerfs run via Docker, Podman, Kubernetes, etc.
@@ -1109,6 +1109,32 @@ It's almost always a permissions issue. Unlike mhddfs and unionfs-fuse, which ru
 Whenever you run into a split permission issue (seeing some but not all files) try using [mergerfs.fsck](https://github.com/trapexit/mergerfs-tools) tool to check for and fix the mismatch. If you aren't seeing anything at all be sure that the basic permissions are correct. The user and group values are correct and that directories have their executable bit set. A common mistake by users new to Linux is to `chmod -R 644` when they should have `chmod -R u=rwX,go=rX`.
 
 If using a network filesystem such as NFS, SMB, CIFS (Samba) be sure to pay close attention to anything regarding permissioning and users. Root squashing and user translation for instance has bitten a few mergerfs users. Some of these also affect the use of mergerfs from container platforms such as Docker.
+
+
+#### Why use FUSE? Why not a kernel based solution?
+
+As with any two solutions to a problem there are advantages and disadvantages to each one.
+
+A FUSE based solution has all the downsides of FUSE:
+
+* Higher IO latency due to the trips in and out of kernel space
+* Higher general overhead due to trips in and out of kernel space
+* Double caching when using page caching
+* Misc limitations due to FUSE's design
+
+But FUSE also has a lot of upsides:
+
+* Easier to offer a cross platform solution
+* Easier forward and backward compatibility
+* Easier updates for users
+* Easier and faster release cadence
+* Allows more flexibility in design and features
+* Overall easier to write, secure, and maintain
+* Ability to run without root access or need to change the kernel
+* Much lower barrier to entry (getting code into the kernel takes a lot of time and effort initially)
+
+
+FUSE was chosen because of all the advantages listed above. The negatives of FUSE do not outweigh the positives.
 
 
 #### Is my OS's libfuse needed for mergerfs to work?
@@ -1265,6 +1291,8 @@ Filesystems are complex and difficult to debug. mergerfs, while being just a pro
 
 **Please make sure you are using the [latest release](https://github.com/trapexit/mergerfs/releases) or have tried it in comparison. Old versions, which are often included in distros like Debian and Ubuntu, are not ever going to be updated and your bug may have been addressed already.**
 
+**For commercial support or feature requests please contact me directly.**
+
 
 #### Information to include in bug reports
 
@@ -1294,37 +1322,9 @@ Filesystems are complex and difficult to debug. mergerfs, while being just a pro
 
 #### Support development
 
-This software is free to use and released under a very liberal license (ISC). That said if you like this software and would like to support its development donations are welcome.
+This software is released under the very liberal ISC license and is therefore free to use for personal or commercial uses. That said if you like this software and have the means please consider supporting its development.
 
-Crypto is fine in whatever protocol you prefer. My preferences for fiat would be GitHub Sponsors or PayPal though feel free to use any platform listed below.
-
-* GitHub Sponsors: https://github.com/sponsors/trapexit
-* PayPal: https://paypal.me/trapexit
-* Patreon: https://www.patreon.com/trapexit
-* BuyMeACoffee: https://buymeacoff.ee/trapexit
-* Ko-Fi: https://ko-fi.com/trapexit
-* Open Collective: https://opencollective.com/trapexit
-* Bitcoin (BTC): bc1qu537hqlnmn2wawx9n7nws0dlkz55h0cd93ny28
-* Bitcoin Cash (BCH): bitcoincash:qqp0vh9v44us74gaggwjfv9y54zfjmmd7srlqxa3xt
-* Bitcoin SV (BSV): 1FkFuxRtt3f8LbkpeUKRZq7gKJFzGSGgZV
-* Bitcoin Gold (BTG): AaPuJgJeohPjkB3LxJM6NKGnaHoRJ8ieT3
-* Litecoin (LTC): MJQzsHBdNnkyGqCFdcAdHYKugicBmfAXfQ
-* Dogecoin (DOGE): DLJNLVe28vZ4SMQSxDJLBQBv57rGtUoWFh
-* Ethereum (ETH): 0xB8d6d55c0319aacC327860d13f891427caEede7a
-* Any ERC20 Token: 0xB8d6d55c0319aacC327860d13f891427caEede7a
-* Ethereum Classic (ETC): 0x2B6054428e69a1201B6555f7a2aEc0Fba01EAD9F
-* Harmony (ONE): one1hrtd2hqrrx4vcvncvrgnlzg5yl9wahn66lq6rw (0xB8d6d55c0319aacC327860d13f891427caEede7a)
-* Monero (XMR): 45BBZMrJwPSaFwSoqLVNEggWR2BJJsXxz7bNz8FXnnFo3GyhVJFSCrCFSS7zYwDa9r1TmFmGMxQ2HTntuc11yZ9q1LeCE8f
-* Dash (DASH): XvsFrohu8tbjA4E8p7xsc86E2ADxLHGXHL
-* Chia (XCH): xch18l7e2q34jtuyzkq0jg8vp7yrtnfwzly30w3yyhkk96um2ur4yqcq6p2een
-* LBRY Credits (LBC): bFusyoZPkSuzM2Pr8mcthgvkymaosJZt5r
-* Ripple (XRP): r9f6aoxaGD8aymxqH89Ke1PCUPkNiFdZZC
-* Tezos (XTZ): tz1ZxerkbbALsuU9XGV9K9fFpuLWnKAGfc1C
-* Zcash (ZEC): t1Zo1GGn2T3GrhKvgdtnTsTnWu6tCPaCaHG
-* DigiByte (DGB): Sb8r1qTrryY9Sp4YkTE1eeKEGVzgArnE5N
-* Namecoin (NMC): NDzb9FkoptGu5QbgetCkodJqo2zE1cTwyb
-* Vertcoin (VTC): 3PYdhokAGXJwWrwHRoTywxG4iUDk6EHjKe
-* Other crypto currencies: contact me for address
+https://github.com/trapexit/support
 
 
 # LINKS
